@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Project Specific
+dataset/
+encodings/encodings.pickle
+attendance.db
+*.dat
+*.pdf
+test_fr.py
+convert_report.py
+
+# Models & Media
+*.jpg
+*.jpeg
+*.png
+*.mp4
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+
+# Streamlit
+.streamlit/
+ Riverside
