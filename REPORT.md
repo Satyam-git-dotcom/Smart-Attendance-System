@@ -63,4 +63,3 @@ To ensure system maintainability, we implemented a comprehensive User Management
 
 ## 12. Conclusion
 The Smart Attendance System demonstrates a practical application of Computer Vision in enhancing organizational efficiency and security. By combining face recognition with liveness detection and management features, it addresses both security vulnerabilities and administrative requirements of modern identification systems.
- Riverside
