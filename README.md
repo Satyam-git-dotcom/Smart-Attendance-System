@@ -76,9 +76,4 @@ To launch the attendance and management dashboard:
 └── requirements.txt      # Project Dependencies
 ```
 
-## 📄 License
-This project is licensed under the [MIT License](LICENSE.md).
 
-## 🤝 Credits
-Developed with the assistance of **Antigravity AI (Advanced Agentic Coding)**.
- Riverside
