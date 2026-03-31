@@ -5,7 +5,11 @@ import dlib
 import os
 from src.liveness import check_liveness
 from src.recognize import load_encodings, recognize_face, encode_faces
-from src.attendance import init_db, mark_attendance, get_attendance_history, get_registered_users, delete_user_db, update_user_db
+from src.attendance import (
+    init_db, mark_attendance, get_attendance_history, 
+    get_registered_users, delete_user_db, update_user_db, 
+    register_user_db, delete_attendance_log
+)
 import pandas as pd
 import time
 import shutil
@@ -21,7 +25,7 @@ init_db()
 
 # Streamlit UI Configuration
 st.set_page_config(page_title="Smart Attendance System", layout="wide")
-st.title("🛡️ Smart Attendance with Anti-Spoofing")
+st.title("🛡️ Smart Attendance with Classroom Management")
 
 # Sidebar for navigation
 sidebar = st.sidebar.radio("Navigation", ["Attendance Tracker", "Attendance History", "Register User", "Manage Users"])
@@ -30,14 +34,14 @@ sidebar = st.sidebar.radio("Navigation", ["Attendance Tracker", "Attendance Hist
 known_data = load_encodings()
 
 if sidebar == "Attendance Tracker":
-    st.subheader("Real-Time Face Recognition & Liveness Detection")
+    st.subheader("Real-Time Face Recognition & Course Logging")
     
     # Placeholder for webcam feed
+    st.info("💡 Stand in front of the camera and **blink** to record your attendance.")
+    attendance_popup_placeholder = st.empty()
     frame_placeholder = st.empty()
     status_placeholder = st.empty()
     
-    # Load dlib facial landmark predictor
-    # Note: Requires shape_predictor_68_face_landmarks.dat in root
     predictor_path = "shape_predictor_68_face_landmarks.dat"
     if not os.path.exists(predictor_path):
         st.error(f"Error: Predictor file '{predictor_path}' not found. Please download it from dlib.net.")
@@ -61,17 +65,15 @@ if sidebar == "Attendance Tracker":
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
-        # Face Recognition (Perform once per frame for all faces)
+        # Face Recognition
         face_locations, face_names = recognize_face(frame, known_data)
-
-        # dlib face detection
         rects = detector(gray, 0)
 
         for i, rect in enumerate(rects):
             shape = predictor(gray, rect)
             shape_np = np.array([[p.x, p.y] for p in shape.parts()])
 
-            # Check liveness (blink detection)
+            # Check liveness
             is_blinking, ear = check_liveness(shape_np, LEFT_EYE_INDICES, RIGHT_EYE_INDICES, EYE_AR_THRESH)
 
             if is_blinking:
@@ -81,39 +83,28 @@ if sidebar == "Attendance Tracker":
                     total_blinks += 1
                 blink_counter = 0
 
-            # Liveness status
             liveness_status = "Real" if total_blinks > 0 else "Pending Liveness (Blink!)"
             color = (0, 255, 0) if liveness_status == "Real" else (0, 0, 255)
 
-            # Draw feedback on frame
             (x, y, w, h) = (rect.left(), rect.top(), rect.width(), rect.height())
+            name = face_names[i] if i < len(face_names) else "Unknown"
+            display_name = name.split("_")[0] if "_" in name else name
             
-            # Simple heuristic: assign the name from recognize_face based on index or position
-            # Since both use dlib/face_recognition, indices often align but we can use coordinates for robustness
-            # Simple heuristic: assign the name from recognize_face based on index or position
-            name = "Unknown"
-            if i < len(face_names):
-                name = face_names[i]
-
-            # Split name and reg_no for cleaner UI display
-            display_name = name
-            if "_" in name:
-                n, r = name.split("_", 1)
-                display_name = f"{n} (Reg: {r})"
-            
+            # Label overlay
             cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
-            cv2.putText(frame, f"Liveness: {liveness_status}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-            cv2.putText(frame, f"ID: {display_name}", (x, y + h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            cv2.putText(frame, f"{display_name} - {liveness_status}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
             # Mark attendance if real and recognized
             if liveness_status == "Real" and name != "Unknown":
                 success, msg = mark_attendance(name)
                 if success:
-                    st.toast(f"✅ {msg} for {display_name}")
-                # Reset blink for next person or next session
-                # total_blinks = 0 
-
-        # Display the frame in Streamlit
+                    attendance_popup_placeholder.success(f"🎉 {msg}: {display_name}")
+                else:
+                    if "Already recorded" in msg:
+                        attendance_popup_placeholder.warning(f"🕒 {msg}")
+                    else:
+                        st.toast(f"❌ {msg}")
+        
         frame_placeholder.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
 
     cap.release()
@@ -121,97 +112,139 @@ if sidebar == "Attendance Tracker":
 elif sidebar == "Attendance History":
     st.subheader("📋 Detailed Attendance Log")
     history = get_attendance_history()
+    
     if history:
-        # history returns (name, reg_no, date, time, status)
-        df = pd.DataFrame(history, columns=["Name", "Reg Number", "Date", "Time", "Status"])
-        st.dataframe(df, use_container_width=True)
+        # columns: ["Name", "Reg Number", "Course", "Date", "Time", "Status", "rowid"]
+        df = pd.DataFrame(history, columns=["Name", "Reg Number", "Course", "Date", "Time", "Status", "RowID"])
+        
+        # Course Filter
+        courses = ["All"] + sorted(list(set(df["Course"].dropna().tolist())))
+        selected_course = st.selectbox("Filter by Course", courses)
+        
+        filtered_df = df if selected_course == "All" else df[df["Course"] == selected_course]
+        
+        # Display the table (without internal rowid)
+        st.dataframe(filtered_df.drop(columns=["RowID"]), use_container_width=True)
+        
+        # Log Management (Deletion)
+        st.divider()
+        st.write("### 🗑️ Manage Individual Logs")
+        log_list = [f"{row['Date']} {row['Time']} - {row['Name']} ({row['Course']})" for idx, row in filtered_df.iterrows()]
+        selected_log_str = st.selectbox("Select a log entry to remove", ["-- Select Entry --"] + log_list)
+        
+        if selected_log_str != "-- Select Entry --":
+            # Find the RowID using the index
+            log_idx = log_list.index(selected_log_str)
+            target_rowid = filtered_df.iloc[log_idx]["RowID"]
+            
+            if st.button("Delete This Entry", type="primary"):
+                if delete_attendance_log(target_rowid):
+                    st.success("Entry removed from history.")
+                    st.rerun()
+                else:
+                    st.error("Error removing entry.")
         
         # Download as CSV
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Full Report (CSV)", data=csv, file_name="attendance_report.csv", mime="text/csv")
+        csv = filtered_df.drop(columns=["RowID"]).to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download Report (CSV)", data=csv, file_name=f"attendance_{selected_course}.csv", mime="text/csv")
     else:
         st.info("No attendance records found yet.")
 
 elif sidebar == "Register User":
-    st.subheader("📝 Register a New User")
-    st.info("Registration requires both a **Name** and a **Registration Number**. For security and stability, the registration window will open in your terminal/console.")
+    st.subheader("📝 New Student Registration")
+    st.info("Register a student into a specific class. Capture 20 images for the AI model.")
     
-    if st.button("Launch Registration Terminal"):
-        st.warning("Please check your terminal to enter the user details.")
-        # We don't use subprocess here because it's hard to handle interactive terminal input via Streamlit buttons
-        # Instead, we guide the user to run the script manually.
-        st.code("python3 register.py", language="bash")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        reg_name = st.text_input("Full Name")
+    with col2:
+        reg_id = st.text_input("Registration ID")
+    with col3:
+        reg_course = st.text_input("Course Name (e.g., Math 101)")
+    
+    if st.button("📷 Start Live Capture", use_container_width=True):
+        if reg_name and reg_id and reg_course:
+            identity = f"{reg_name}_{reg_id}"
+            save_path = os.path.join("dataset", identity)
+            if not os.path.exists(save_path): os.makedirs(save_path)
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            frame_placeholder = st.empty()
+            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            
+            cap = cv2.VideoCapture(0)
+            count = 0
+            while count < 20:
+                ret, frame = cap.read()
+                if not ret: break
+                
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+                
+                display_frame = frame.copy()
+                for (x, y, w, h) in faces:
+                    cv2.rectangle(display_frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
+                    count += 1
+                    cv2.imwrite(f"{save_path}/{identity}_{count}.jpg", frame[y:y+h, x:x+w])
+                    progress_bar.progress(count / 20)
+                    status_text.text(f"Capturing: {count}/20 images...")
+                    time.sleep(0.3)
+                
+                frame_placeholder.image(cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
+                if count >= 20: break
+            
+            cap.release()
+            frame_placeholder.empty()
+            
+            if register_user_db(reg_name, reg_id, reg_course):
+                with st.spinner("Optimizing AI model for new student..."):
+                    encode_faces()
+                    st.success(f"✅ {reg_name} registered for {reg_course}!")
+            else:
+                st.error("Registration ID already exists.")
+        else:
+            st.warning("Please fill in all 3 fields (Name, ID, and Course).")
 
 elif sidebar == "Manage Users":
-    st.subheader("👥 User Management Dashboard")
+    st.subheader("👥 Student & Class Records")
     users = get_registered_users()
     
     if users:
-        df_users = pd.DataFrame(users, columns=["Name", "Reg Number", "Registered At"])
+        # columns: [Name, RegNo, Date, RowID, Course]
+        display_data = [[u[0], u[1], u[4], u[2]] for u in users]
+        df_users = pd.DataFrame(display_data, columns=["Name", "Reg ID", "Course", "Joined At"])
         st.dataframe(df_users, use_container_width=True)
         
         st.divider()
-        st.write("### Actions")
+        st.write("### ⚙️ Edit Records")
+        user_ids = [f"{u[0]} ({u[4]}) [ID: {u[1]}]" for u in users]
+        selection = st.selectbox("Select student to Manage", ["-- Select Student --"] + user_ids)
         
-        # Select user to manage
-        user_list = [f"{u[0]} ({u[1]})" for u in users]
-        selected_user_str = st.selectbox("Select user to Edit or Delete", ["-- Select User --"] + user_list)
-        
-        if selected_user_str != "-- Select User --":
-            # Extract reg_no from the selection string "Name (RegNo)"
-            selected_reg_no = selected_user_str.split("(")[-1].strip(")")
-            selected_user_data = next(u for u in users if u[1] == selected_reg_no)
+        if selection != "-- Select Student --":
+            user_idx = user_ids.index(selection)
+            selected_user_data = users[user_idx]
             
             col1, col2 = st.columns(2)
-            
             with col1:
-                st.write("#### 📝 Edit User Info")
-                edit_name = st.text_input("New Name", value=selected_user_data[0])
-                edit_reg = st.text_input("New Registration Number", value=selected_user_data[1])
+                st.write("#### 📝 Edit Info")
+                edit_name = st.text_input("Name", value=selected_user_data[0], key=f"e_n_{selected_user_data[3]}")
+                edit_reg = st.text_input("ID", value=selected_user_data[1], key=f"e_r_{selected_user_data[3]}")
+                edit_course = st.text_input("Course", value=selected_user_data[4], key=f"e_c_{selected_user_data[3]}")
                 
-                if st.button("Save Changes"):
-                    if edit_name and edit_reg:
-                        # Rename dataset folder
-                        old_identity = f"{selected_user_data[0]}_{selected_user_data[1]}"
-                        new_identity = f"{edit_name}_{edit_reg}"
-                        
-                        old_path = os.path.join("dataset", old_identity)
-                        new_path = os.path.join("dataset", new_identity)
-                        
-                        success = True
-                        if os.path.exists(old_path):
-                            try:
-                                os.rename(old_path, new_path)
-                            except Exception as e:
-                                st.error(f"Error renaming dataset folder: {e}")
-                                success = False
-                        
-                        if success:
-                            if update_user_db(selected_user_data[1], edit_name, edit_reg):
-                                st.success("Database updated! Re-generating encodings...")
-                                encode_faces()
-                                st.rerun()
-                            else:
-                                st.error("Error updating database. Registration Number might already exist.")
-                    else:
-                        st.warning("Please fill in both fields.")
-
+                if st.button("Save Changes", key=f"s_{selected_user_data[3]}", use_container_width=True):
+                    if update_user_db(selected_user_data[3], selected_user_data[1], edit_name, edit_reg, edit_course):
+                        st.success("Student details updated.")
+                        st.rerun()
+            
             with col2:
-                st.write("#### 🗑️ Delete User")
-                st.warning(f"Are you sure you want to delete {selected_user_data[0]}?")
-                if st.button("Confirm Delete", type="primary"):
-                    # Delete dataset folder
-                    identity = f"{selected_user_data[0]}_{selected_user_data[1]}"
-                    path = os.path.join("dataset", identity)
-                    
-                    if os.path.exists(path):
-                        shutil.rmtree(path)
-                    
-                    # Delete from DB
-                    delete_user_db(selected_user_data[1])
-                    
-                    st.success("User deleted! Re-generating encodings...")
-                    encode_faces()
-                    st.rerun()
+                st.write("#### 🗑️ Remove Student")
+                st.warning("This will remove all photos and attendance history.")
+                if st.button("Confirm Delete", type="primary", key=f"d_{selected_user_data[3]}", use_container_width=True):
+                    if delete_user_db(selected_user_data[3], selected_user_data[1]):
+                        shutil.rmtree(os.path.join("dataset", f"{selected_user_data[0]}_{selected_user_data[1]}"), ignore_errors=True)
+                        encode_faces()
+                        st.success("Student removed.")
+                        st.rerun()
     else:
-        st.info("No registered users found.")
+        st.info("No students registered yet.")

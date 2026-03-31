@@ -1,34 +1,34 @@
-# 🛡️ Smart Attendance System with Anti-Spoofing
+# 🛡️ Smart Attendance System with Classroom Management
 
-A professional, AI-powered attendance solution utilizing **Face Recognition (Dlib/FaceNet)** and **Liveness Detection (Blink Detection)** to ensure secure and efficient tracking. Optimized for modern macOS environments (Apple Silicon).
+A professional, AI-powered attendance solution utilizing **Face Recognition (Dlib)** and **Liveness Detection (Blink Detection)**. This system is designed for teachers and administrators to manage multiple courses, students, and attendance logs through a single, intuitive dashboard.
 
 ## 🚀 Key Features
-- **Real-Time Identification**: High-accuracy face recognition using the `face_recognition` library.
-- **Anti-Spoofing (Liveness)**: Prevents "Photo-Spoofing" and "Video-Spoofing" by requiring students to blink (Eye Aspect Ratio method).
-- **ID-Based Tracking**: Every user is tracked by both Name and a unique Registration Number.
-- **Administrative Dashboard**: 
-    - **Live Tracker**: Monitor high-FPS attendance with visual feedback.
-    - **Manage Users**: Search, edit, and delete registered users from the UI.
-    - **Attendance History**: View, filter, and export detailed logs (CSV).
-- **Secure Persistence**: Centralized SQLite database for managing all records.
+- **Classroom Management**: Organize students by **Course/Class** (e.g., "Math 101", "Computer Vision").
+- **Native UI Registration**: Register students with 20-frame face capture directly in the web dashboard—no terminal commands required!
+- **Anti-Spoofing (Liveness)**: Prevents photo or video fraud by requiring a physical **Blink** (Eye Aspect Ratio method) to confirm attendance.
+- **Flexible Tracking**: Supports multiple entries per day with a **5-minute cooldown** to prevent duplicate flooding.
+- **Administrative Control**:
+    - **Manage Students**: Edit profile details, change courses, or permanently remove students and their datasets.
+    - **Log Deletion**: Delete individual attendance entries if recorded by mistake without affecting student records.
+    - **Advanced Filtering**: Filter history by Course, Name, or Date and export reports to **CSV**.
 
 ## 🛠️ Tech Stack
 - **Languages**: Python 3.x
 - **Computer Vision**: OpenCV, Dlib, face_recognition
 - **User Interface**: Streamlit
 - **Data Layer**: SQLite3, Pandas
-- **Models**: HOG Detector, 68-Facial Landmark Predictor, ResNet-34 Face Embedding
+- **Aesthetics**: Premium Dark/Modern UI with interactive feedback and animations.
 
 ## 📦 Installation & Setup
 
 ### 1. System Dependencies (macOS)
-Before setting up the Python environment, ensure you have the required build tools for **Dlib**:
+Dlib requires C++ build tools. Install them via Homebrew:
 ```bash
 brew install cmake boost libpng jpeg-turbo
 ```
 
 ### 2. Environment Setup
-Clone the repository and install the dependencies:
+Clone the repository and install the Python dependencies:
 ```bash
 git clone https://github.com/[your-username]/smart-attendance-system.git
 cd smart-attendance-system
@@ -37,41 +37,28 @@ pip install -r requirements.txt
 
 ### 3. Required Models
 Download the facial landmark predictor and place it in the project root:
-- [shape_predictor_68_face_landmarks.dat](http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2) (Extract the `.bz2` file after downloading).
+- [shape_predictor_68_face_landmarks.dat](http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2)
 
 ## 🏃 Usage Guide
 
-### Phase 1: User Registration
-To register a new student or employee:
-1.  Run the CLI registration script:
-    ```bash
-    python3 register.py
-    ```
-2.  Enter the user's **Name** and **Registration Number**.
-3.  Look at the webcam and move your head slowly as the system captures 20 reference images.
-4.  The system will automatically generate the required face encodings.
-
-### Phase 2: Attendance Tracking
-To launch the attendance and management dashboard:
-1.  Run the Streamlit application:
-    ```bash
-    streamlit run app.py
-    ```
-2.  Select **"Attendance Tracker"** from the sidebar.
-3.  Each person stands in front of the camera and **blinks** to confirm their identity.
-4.  Check the **"Attendance History"** tab to view or download the logs.
+1. **Launch the Dashboard**:
+   ```bash
+   streamlit run app.py
+   ```
+2. **Phase 1: Registration**: Go to **"Register User"**, enter the Student Name, ID, and **Course**, then start the live capture.
+3. **Phase 2: Attendance**: Students stand in front of the **"Attendance Tracker"** and blink. The success message confirms their name and class.
+4. **Phase 3: Management**: Use **"Attendance History"** to filter by course or delete specific incorrect logs.
 
 ## 📂 Project Structure
 ```text
 .
-├── app.py                # Main Streamlit Dashboard
-├── register.py           # CLI User Registration
+├── app.py                # Main Dashboard (Tracker, History, Registration, Management)
 ├── src/
 │   ├── liveness.py       # EAR Blink Detection logic
-│   ├── recognize.py      # Face Identification logic
-│   └── attendance.py     # Database & History Management
-├── dataset/              # User Face Datasets (Ignored by Git)
-├── encodings/            # Generated Face Models (Ignored by Git)
-├── attendance.db         # SQLite Database (Ignored by Git)
-└── requirements.txt      # Project Dependencies
+│   ├── recognize.py      # Face Identification & Encoding logic
+│   └── attendance.py     # Database Schema & Classroom logic
+├── dataset/              # Student Image Datasets (Local only)
+├── encodings/            # AI Model Encodings (Local only)
+├── attendance.db         # SQLite Database (Local only)
+└── requirements.txt      # Dependencies
 ```
