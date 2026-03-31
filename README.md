@@ -75,5 +75,3 @@ To launch the attendance and management dashboard:
 ├── attendance.db         # SQLite Database (Ignored by Git)
 └── requirements.txt      # Project Dependencies
 ```
-
-
